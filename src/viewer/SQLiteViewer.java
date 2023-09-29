@@ -1,6 +1,10 @@
 package viewer;
 
+
 import javax.swing.*;
+import javax.swing.event.TableModelEvent;
+import javax.swing.event.TableModelListener;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.io.File;
 import java.sql.*;
@@ -26,6 +30,7 @@ public class SQLiteViewer extends JFrame {
         JPanel panel1 = new JPanel(new BorderLayout());
         JPanel panel2 = new JPanel(new BorderLayout());
         JPanel panel3 = new JPanel(new BorderLayout());
+        JPanel panel4 = new JPanel(new BorderLayout());
         List<JPanel> panels = List.of(panel, panel1, panel3);
         panels.forEach(panell -> panell.setPreferredSize(new Dimension(670, 30)));
         panel2.setPreferredSize(new Dimension(670, 90));
@@ -33,6 +38,7 @@ public class SQLiteViewer extends JFrame {
         add(panel1);
         add(panel2);
         add(panel3);
+        add(panel4);
 
         //setLayout(new GridLayout(4, 1, 5, 5));
         JLabel labelData = new JLabel("Database:");
@@ -81,6 +87,29 @@ public class SQLiteViewer extends JFrame {
         button1.setPreferredSize(new Dimension(105, 10));
 
         panel3.add(button1, BorderLayout.EAST);
+        /**
+         * for table
+         */
+
+
+        DefaultTableModel model = new DefaultTableModel();
+        JTable table = new JTable(model);
+        table.setName("Table");
+
+        // Set preferred size for the JTable (for example)
+        table.setPreferredSize(new Dimension(670, 500));
+
+// Set preferred size for the JScrollPane (if used)
+        JScrollPane scrollPane = new JScrollPane(table);
+        scrollPane.setPreferredSize(new Dimension(670, 500));
+        panel4.add(scrollPane, BorderLayout.SOUTH);
+
+
+
+/*        JScrollPane sp = new JScrollPane(table);
+        sp.setPreferredSize(new Dimension(670, 550));
+        add(sp);*/
+
         List<String> listOfTables = new ArrayList<>();
 
 
@@ -91,31 +120,108 @@ public class SQLiteViewer extends JFrame {
 
                 comboBox.removeAllItems();
                 listOfTables.clear();
+                File file = new File(path);
+                if (!file.exists()) {
+                    JOptionPane.showMessageDialog(new Frame(), "File doesn't exist!");
+                    comboBox.setEnabled(false);
+                    textArea.setEnabled(false);
+                    button1.setEnabled(false);
+                } else {
+                    comboBox.setEnabled(true);
+                    textArea.setEnabled(true);
+                    button1.setEnabled(true);
+                    Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path);
+                    Statement statement = connection.createStatement();
+                    ResultSet resultSet = statement.executeQuery("SELECT name FROM sqlite_master WHERE type ='table' AND name NOT LIKE 'sqlite_%'");
 
-                Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path);
-                Statement statement = connection.createStatement();
-                ResultSet resultSet = statement.executeQuery("SELECT name FROM sqlite_master WHERE type ='table' AND name NOT LIKE 'sqlite_%'");
-
-                while (resultSet.next()) {
-                    String tableName = resultSet.getString("name");
-                    listOfTables.add(tableName);
+                    while (resultSet.next()) {
+                        String tableName = resultSet.getString("name");
+                        listOfTables.add(tableName);
+                    }
+                    resultSet.close();
+                    statement.close();
+                    connection.close();
+                    // Process the ResultSet here
+                    listOfTables.forEach(comboBox::addItem);
+                    comboBox.setSelectedIndex(0);
                 }
-                resultSet.close();
-                statement.close();
-                connection.close();
-                // Process the ResultSet here
+
             } catch (SQLException ex) {
                 // Handle any SQL exceptions here
             }
-            listOfTables.forEach(comboBox::addItem);
-            comboBox.setSelectedIndex(0);
+
         });
         comboBox.addActionListener(e -> {
             String nameToSelect = (String) comboBox.getSelectedItem();
             textArea.setText("SELECT * FROM " + nameToSelect + ";");
         });
-    }
-    }
 
+        button1.addActionListener(e -> {
+            String text = textField.getText();
+            String path = "C:\\sqlite\\" + text;
+            try {
+                Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path);
+                Statement statement = connection.createStatement();
+
+                statement.execute("CREATE TABLE IF NOT EXISTS contacts (\n" +
+                        "\tcontact_id INTEGER PRIMARY KEY,\n" +
+                        "\tfirst_name TEXT NOT NULL,\n" +
+                        "\tlast_name TEXT NOT NULL,\n" +
+                        "\temail TEXT NOT NULL UNIQUE,\n" +
+                        "\tphone TEXT NOT NULL UNIQUE\n" +
+                        ");");
+                statement.execute("CREATE TABLE IF NOT EXISTS groups (\n" +
+                        "   group_id INTEGER PRIMARY KEY,\n" +
+                        "   name TEXT NOT NULL\n" +
+                        ");");
+
+                statement.execute("DELETE FROM contacts");
+                statement.execute("INSERT INTO contacts VALUES(1, 'Sharmin', 'Pittman', 'sharmin@gmail.com', '202-555-0140')");
+                statement.execute("INSERT INTO contacts VALUES(2, 'Fred', 'Hood', 'fred@gmail.com', '202-555-0175')");
+                statement.execute("INSERT INTO contacts VALUES(3, 'Emeli', 'Ortega', 'emeli@gmail.com', '202-555-0138')");
+
+                ResultSet resultSet = statement.executeQuery(textArea.getText());
+
+                List<Object[]> data = new ArrayList<>();
+
+                int numberOfColumns = resultSet.getMetaData().getColumnCount();
+
+                while (resultSet.next()) {
+                    Object[] row = new Object[numberOfColumns];
+                    for (int i = 1; i <= numberOfColumns; i++) {
+                        row[i - 1] = resultSet.getObject(i);
+                    }
+                    data.add(row);
+                }
+
+                // Set column names in the table model
+
+                model.setColumnIdentifiers(getColumnNames(resultSet.getMetaData()));
+
+                resultSet.close();
+                statement.close();
+                connection.close();
+
+                // Clear existing data in the table
+                model.setRowCount(0);
+                // Add the new data to the table
+                for (Object[] row : data) {
+                    model.addRow(row);
+                }
+            } catch(Exception ex) {
+
+            }
+
+        });
+    }
+    private static String[] getColumnNames(ResultSetMetaData metaData) throws SQLException {
+        int columnCount = metaData.getColumnCount();
+        String[] columnNames = new String[columnCount];
+        for (int i = 1; i <= columnCount; i++) {
+            columnNames[i - 1] = metaData.getColumnName(i);
+        }
+        return columnNames;
+    }
+    }
 
 
